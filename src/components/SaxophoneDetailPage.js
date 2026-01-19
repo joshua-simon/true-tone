@@ -5,13 +5,30 @@ import { db } from '../firebase';
 import { useAuth } from '../context/AuthContext';
 import AddReview from './AddReview';
 
+const AFFILIATION_LABELS = {
+  endorsed: 'Endorsed by',
+  works_for: 'Works for',
+  former_employee: 'Former employee of',
+  dealer: 'Authorized dealer for',
+};
+
+const AFFILIATION_DISCLOSURES = {
+  endorsed: (manufacturer) =>
+    `This reviewer is endorsed by ${manufacturer} and may receive instruments and support from the company. Consider potential bias when evaluating their assessment.`,
+  works_for: (manufacturer) =>
+    `This reviewer works for ${manufacturer}. Consider potential bias when evaluating their assessment.`,
+  former_employee: (manufacturer) =>
+    `This reviewer is a former employee of ${manufacturer}. Consider potential bias when evaluating their assessment.`,
+  dealer: (manufacturer) =>
+    `This reviewer is an authorized dealer for ${manufacturer}. Consider potential bias when evaluating their assessment.`,
+};
+
 const RATING_CATEGORIES = {
   tonalCharacter: {
     label: 'Tonal Character',
     sliders: [
       { key: 'darkBright', leftLabel: 'Dark/Warm', rightLabel: 'Bright' },
       { key: 'centeredBroad', leftLabel: 'Centered', rightLabel: 'Broad' },
-      { key: 'focusedDiffuse', leftLabel: 'Focused', rightLabel: 'Diffuse' },
     ],
   },
   responseProjection: {
@@ -19,21 +36,13 @@ const RATING_CATEGORIES = {
     sliders: [
       { key: 'intimateProjecting', leftLabel: 'Intimate', rightLabel: 'Projecting' },
       { key: 'resistantFreeblowing', leftLabel: 'Resistant', rightLabel: 'Free-blowing' },
-    ],
-  },
-  technicalResponse: {
-    label: 'Technical Response',
-    sliders: [
-      { key: 'altissimo', leftLabel: 'Sluggish altissimo', rightLabel: 'Easy altissimo' },
-      { key: 'keywork', leftLabel: 'Heavy keywork', rightLabel: 'Light keywork' },
-      { key: 'ergonomics', leftLabel: 'Uncomfortable', rightLabel: 'Ergonomic' },
+      { key: 'keyAction', leftLabel: 'Light action', rightLabel: 'Heavy action' },
     ],
   },
   buildQuality: {
     label: 'Build Quality',
     sliders: [
-      { key: 'intonation', leftLabel: 'Intonation issues', rightLabel: 'Perfect intonation' },
-      { key: 'qualityControl', leftLabel: 'Inconsistent QC', rightLabel: 'Reliable QC' },
+      { key: 'buildQuality', leftLabel: 'Low', rightLabel: 'High' },
     ],
   },
 };
@@ -107,10 +116,33 @@ function SaxophoneDetailPage() {
         // Fetch reviews subcollection
         const reviewsRef = collection(db, 'saxophones', saxophoneId, 'reviews');
         const reviewsSnap = await getDocs(reviewsRef);
-        const reviewsData = reviewsSnap.docs.map((doc) => ({
-          id: doc.id,
-          ...doc.data(),
-        }));
+        const reviewsData = await Promise.all(
+          reviewsSnap.docs.map(async (reviewDoc) => {
+            const reviewData = {
+              id: reviewDoc.id,
+              ...reviewDoc.data(),
+            };
+
+            // Fetch reviewer's user profile for affiliation info
+            if (reviewData.reviewerId) {
+              try {
+                const userRef = doc(db, 'users', reviewData.reviewerId);
+                const userSnap = await getDoc(userRef);
+                if (userSnap.exists()) {
+                  const userData = userSnap.data();
+                  reviewData.reviewerName = userData.name;
+                  reviewData.reviewerHasAffiliation = userData.hasAffiliation;
+                  reviewData.reviewerAffiliationType = userData.affiliationType;
+                  reviewData.reviewerManufacturerName = userData.manufacturerName;
+                }
+              } catch (err) {
+                console.error('Error fetching reviewer data:', err);
+              }
+            }
+
+            return reviewData;
+          })
+        );
 
         setReviews(reviewsData);
       } catch (err) {
@@ -129,10 +161,9 @@ function SaxophoneDetailPage() {
     if (reviews.length === 0) return null;
 
     const ratingKeys = [
-      'darkBright', 'centeredBroad', 'focusedDiffuse',
-      'intimateProjecting', 'resistantFreeblowing',
-      'altissimo', 'keywork', 'ergonomics',
-      'intonation', 'qualityControl',
+      'darkBright', 'centeredBroad',
+      'intimateProjecting', 'resistantFreeblowing', 'keyAction',
+      'buildQuality',
     ];
 
     const aggregated = {};
@@ -274,39 +305,33 @@ function SaxophoneDetailPage() {
             </h2>
 
             <div className="review-list">
-              {reviews.map((review) => (
+              {reviews.map((review) => {
+                const displayName = review.reviewerName || review.reviewerEmail || 'Anonymous';
+                const hasAffiliation = review.reviewerHasAffiliation && review.reviewerAffiliationType && review.reviewerManufacturerName;
+                const affiliationLabel = hasAffiliation
+                  ? `${AFFILIATION_LABELS[review.reviewerAffiliationType]} ${review.reviewerManufacturerName}`
+                  : null;
+
+                return (
                 <div key={review.id} className="review-card">
                   <div className="review-card-header">
                     <h3 className="review-card-author">
-                      Review by {review.reviewerEmail || 'Anonymous'}
+                      Review by {displayName}
+                      {affiliationLabel && (
+                        <span style={{ fontWeight: 'normal', color: '#6b7280' }}> - {affiliationLabel}</span>
+                      )}
                     </h3>
                     {review.credentials && (
                       <p className="review-card-credentials">{review.credentials}</p>
                     )}
                   </div>
 
-                  {review.hasConflict && review.conflictDisclosure && (
-                    <div className="alert alert-warning mb-4">
-                      <span className="font-medium">Conflict of Interest:</span> {review.conflictDisclosure}
-                    </div>
-                  )}
-
-                  <div className="ratings-grid mb-4">
-                    {Object.entries(RATING_CATEGORIES).map(([key, category]) => (
-                      <RatingCategoryDisplay
-                        key={key}
-                        category={category}
-                        ratings={review.ratings}
-                      />
-                    ))}
-                  </div>
-
                   <div className="review-card-content">
-                    <h4 className="review-card-title">Written Review</h4>
                     <p className="review-card-text">{review.writtenReview}</p>
                   </div>
                 </div>
-              ))}
+                );
+              })}
             </div>
           </section>
         )}

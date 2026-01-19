@@ -1,7 +1,10 @@
 import { useState } from 'react';
 import { signInWithEmailAndPassword } from 'firebase/auth';
-import { auth } from '../firebase';
+import { doc, getDoc, setDoc, Timestamp } from 'firebase/firestore';
+import { auth, db } from '../firebase';
 import { useNavigate, Link } from 'react-router-dom';
+
+const ADMIN_EMAIL = 'joshy.d.simon@gmail.com';
 
 function Login() {
   const [email, setEmail] = useState('');
@@ -16,8 +19,33 @@ function Login() {
     setLoading(true);
 
     try {
-      await signInWithEmailAndPassword(auth, email, password);
-      navigate('/dashboard');
+      const userCredential = await signInWithEmailAndPassword(auth, email, password);
+      const user = userCredential.user;
+
+      // Check if this is the admin user
+      if (user.email === ADMIN_EMAIL) {
+        // Ensure admin role is set in Firestore
+        const userRef = doc(db, 'users', user.uid);
+        const userSnap = await getDoc(userRef);
+
+        if (!userSnap.exists()) {
+          // Create admin user document if it doesn't exist
+          await setDoc(userRef, {
+            userId: user.uid,
+            role: 'admin',
+            email: user.email,
+            name: 'Admin',
+            createdAt: Timestamp.now(),
+          });
+        } else if (userSnap.data().role !== 'admin') {
+          // Update role to admin if not already set
+          await setDoc(userRef, { role: 'admin' }, { merge: true });
+        }
+
+        navigate('/admin');
+      } else {
+        navigate('/dashboard');
+      }
     } catch (err) {
       setError('Failed to sign in. Please check your credentials.');
       console.error(err);

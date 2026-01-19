@@ -1,11 +1,43 @@
+import { useState, useEffect } from 'react';
 import { signOut } from 'firebase/auth';
-import { auth } from '../firebase';
+import { doc, getDoc } from 'firebase/firestore';
+import { auth, db } from '../firebase';
 import { useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
+
+const AFFILIATION_LABELS = {
+  endorsed: 'Endorsed by',
+  works_for: 'Works for',
+  former_employee: 'Former employee of',
+  dealer: 'Authorized dealer for',
+};
 
 function ReviewerDashboard() {
   const { currentUser } = useAuth();
   const navigate = useNavigate();
+  const [userProfile, setUserProfile] = useState(null);
+  const [loadingProfile, setLoadingProfile] = useState(true);
+
+  useEffect(() => {
+    async function fetchUserProfile() {
+      if (!currentUser) return;
+
+      try {
+        const userRef = doc(db, 'users', currentUser.uid);
+        const userSnap = await getDoc(userRef);
+
+        if (userSnap.exists()) {
+          setUserProfile(userSnap.data());
+        }
+      } catch (err) {
+        console.error('Error fetching user profile:', err);
+      } finally {
+        setLoadingProfile(false);
+      }
+    }
+
+    fetchUserProfile();
+  }, [currentUser]);
 
   async function handleLogout() {
     try {
@@ -15,6 +47,13 @@ function ReviewerDashboard() {
       console.error('Failed to log out:', error);
     }
   }
+
+  const getAffiliationDisplay = () => {
+    if (!userProfile?.hasAffiliation || !userProfile?.affiliationType || !userProfile?.manufacturerName) {
+      return null;
+    }
+    return `${AFFILIATION_LABELS[userProfile.affiliationType]} ${userProfile.manufacturerName}`;
+  };
 
   return (
     <div className="min-h-screen bg-warm-gray">
@@ -79,11 +118,70 @@ function ReviewerDashboard() {
           </Link>
         </div>
 
+        {/* Profile Section */}
+        <div className="section-cream mb-8">
+          <h2 className="text-lg font-semibold text-deep-black mb-4">Your Profile</h2>
+
+          {loadingProfile ? (
+            <p className="text-gray-500 text-sm">Loading profile...</p>
+          ) : userProfile ? (
+            <div className="space-y-3">
+              <div>
+                <span className="text-sm text-gray-500">Name:</span>
+                <p className="text-deep-black font-medium">{userProfile.name || 'Not set'}</p>
+              </div>
+
+              <div>
+                <span className="text-sm text-gray-500">Email:</span>
+                <p className="text-deep-black">{userProfile.email}</p>
+              </div>
+
+              {userProfile.credentials && (
+                <div>
+                  <span className="text-sm text-gray-500">Credentials:</span>
+                  <p className="text-deep-black">{userProfile.credentials}</p>
+                </div>
+              )}
+
+              {userProfile.bio && (
+                <div>
+                  <span className="text-sm text-gray-500">Bio:</span>
+                  <p className="text-deep-black">{userProfile.bio}</p>
+                </div>
+              )}
+
+              <div>
+                <span className="text-sm text-gray-500">Affiliation:</span>
+                {getAffiliationDisplay() ? (
+                  <p className="text-deep-black">
+                    <span style={{
+                      display: 'inline-block',
+                      padding: '2px 8px',
+                      background: '#FEF3C7',
+                      color: '#92400E',
+                      borderRadius: '4px',
+                      fontSize: '14px',
+                    }}>
+                      {getAffiliationDisplay()}
+                    </span>
+                  </p>
+                ) : (
+                  <p className="text-gray-600">No manufacturer affiliation</p>
+                )}
+              </div>
+            </div>
+          ) : (
+            <p className="text-gray-600 text-sm">
+              Profile not found. Please contact support.
+            </p>
+          )}
+        </div>
+
         {/* Stats / Info Section */}
         <div className="section-cream">
           <h2 className="text-lg font-semibold text-deep-black mb-4">Your Activity</h2>
           <p className="text-gray-600 text-sm">
-            More dashboard features coming soon, including your review history, statistics, and profile management.
+            More dashboard features coming soon, including your review history and statistics.
           </p>
         </div>
       </main>

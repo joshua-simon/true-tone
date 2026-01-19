@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { collection, getDocs } from 'firebase/firestore';
 import { db } from '../firebase';
+import { useAuth } from '../context/AuthContext';
 
 const SAXOPHONE_TYPES = ['All', 'Soprano', 'Alto', 'Tenor', 'Baritone'];
 const PRICE_RANGES = [
@@ -138,6 +139,7 @@ function SaxophoneTable({ saxophones }) {
 }
 
 function Homepage() {
+  const { currentUser } = useAuth();
   const [saxophones, setSaxophones] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -225,15 +227,21 @@ function Homepage() {
         <div className="header-content">
           <div>
             <h1 className="header-title">True Tone</h1>
-            <p className="header-subtitle">Expert reviews without the marketing speak</p>
+            <p className="header-subtitle">Expert reviews without the fluff</p>
           </div>
           <nav className="header-nav">
             <Link to="/" className="header-link">Home</Link>
             <Link to="/about" className="header-link">About</Link>
             <Link to="/reviewers" className="header-link">Reviewers</Link>
-            <Link to="/login" className="nav-btn">
-              Reviewer Login
-            </Link>
+            {currentUser ? (
+              <Link to="/dashboard" className="nav-btn">
+                Dashboard
+              </Link>
+            ) : (
+              <Link to="/login" className="nav-btn">
+                Reviewer Login
+              </Link>
+            )}
           </nav>
         </div>
       </header>

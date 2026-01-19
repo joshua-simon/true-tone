@@ -1,6 +1,6 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
-import { collection, addDoc, serverTimestamp } from 'firebase/firestore';
+import { collection, addDoc, serverTimestamp, doc, getDoc } from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { db, storage } from '../firebase';
 import { useAuth } from '../context/AuthContext';
@@ -28,6 +28,24 @@ function NewSaxophoneReview() {
   // Form state
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [userProfile, setUserProfile] = useState(null);
+
+  // Fetch user profile for credentials
+  useEffect(() => {
+    async function fetchUserProfile() {
+      if (!currentUser) return;
+      try {
+        const userRef = doc(db, 'users', currentUser.uid);
+        const userSnap = await getDoc(userRef);
+        if (userSnap.exists()) {
+          setUserProfile(userSnap.data());
+        }
+      } catch (err) {
+        console.error('Error fetching user profile:', err);
+      }
+    }
+    fetchUserProfile();
+  }, [currentUser]);
 
   const handlePhotoChange = (e) => {
     const file = e.target.files[0];
@@ -53,10 +71,6 @@ function NewSaxophoneReview() {
     if (!priceRange.trim()) return 'Price range is required';
     if (!description.trim()) return 'Description is required';
     if (!reviewData?.writtenReview?.trim()) return 'Written review is required';
-    if (!reviewData?.credentials?.trim()) return 'Reviewer credentials are required';
-    if (reviewData?.hasConflict && !reviewData?.conflictDisclosure?.trim()) {
-      return 'Please describe your conflict of interest';
-    }
     return null;
   };
 
@@ -102,9 +116,7 @@ function NewSaxophoneReview() {
         reviewerEmail: currentUser.email,
         ratings: reviewData.ratings,
         writtenReview: reviewData.writtenReview.trim(),
-        credentials: reviewData.credentials.trim(),
-        hasConflict: reviewData.hasConflict,
-        conflictDisclosure: reviewData.hasConflict ? reviewData.conflictDisclosure.trim() : null,
+        credentials: userProfile?.credentials || '',
         createdAt: serverTimestamp(),
       };
 
@@ -256,7 +268,6 @@ function NewSaxophoneReview() {
             <ReviewRatingSliders
               reviewData={reviewData}
               onChange={handleReviewChange}
-              userCredentials={currentUser?.displayName}
             />
           </section>
 
